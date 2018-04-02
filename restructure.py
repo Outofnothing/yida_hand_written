@@ -7,8 +7,7 @@ WRITE_FOLDER = 'write_folder'  # 最后得到的一个个的数字的图片
 PROCESS_FOLDER = 'process'  # 被二值化、腐蚀之后的图片（预处理图片）
 DIGITS_STR_FOLDER = 'strings'  # 一串一串的数字
 # 调整以下参数可以获得合适的预处理图片
-THRESHOLD = 120  # discriminate digits from background
-CROP_LEN = 10  # get rid of original image's black borders
+CROP_LEN = 40  # 被去掉的A4纸边缘的长度， 注意是每边
 RESOLUTION = 28  # 28*28 for mnist dataset
 kernel_connect = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], np.uint8)
 # Elliptical Kernel
@@ -54,14 +53,8 @@ def split_digits_str(s, prefix_name, is_vertical):
         s = np.rot90(s, 2)
     else:
         s = np.rot90(s)
-
-    # if each digit is continuous (not broken), needn't dilate
-    # so for image 5/6/7, use (*); otherwise, use (**)
-    # for image 0/1, iter=2; for image 2/3/4, iter=1
-    s_copy = cv2.dilate(s, kernel_connect, iterations=1)  # (**)
-
-    s_copy2 = s_copy.copy()
-    im_s, contours, hierarchy = cv2.findContours(s_copy2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    s_copy = cv2.dilate(s, kernel_connect, iterations=1)
+    im_s, contours, hierarchy = cv2.findContours(s_copy.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     idx = 0
     digits_arr = np.array([])
     for contour in contours:
@@ -82,7 +75,7 @@ def split_digits_str(s, prefix_name, is_vertical):
         digit = cv2.resize(digit, (RESOLUTION, RESOLUTION), interpolation=cv2.INTER_AREA)
 
         digit = np.rot90(digit, 3)  # rotate back to horizontal orientation
-        digit_name = os.path.join(WRITE_FOLDER, prefix_name + str(idx) + '.png')
+        digit_name = os.path.join(WRITE_FOLDER, str(prefix_name + str(idx) + '.png'))
         cv2.imwrite(digit_name, digit)
 
         # a digit: transform 2D array to 1D array
@@ -94,54 +87,61 @@ def split_digits_str(s, prefix_name, is_vertical):
     # 上面的语句加上后报错，也不知道到底做什么用的
 
 
-def load_digits_arr_from_folder():  # 输出整理好的单个数字的串
-    digits_arr = np.array([])
-    for filename in os.listdir(WRITE_FOLDER):
-        img = cv2.imread(os.path.join(WRITE_FOLDER, filename), 0)
-        fn = os.path.splitext(filename)[0]  # without extension
-        if img is not None:
-            digit = np.concatenate([(img[i]) for i in range(RESOLUTION)])
-            digits_arr = np.append(digits_arr, digit)
-    digits_arr = digits_arr.reshape((-1, RESOLUTION * RESOLUTION))
-    return digits_arr
+def find_digits_str(img):  # 找出所有的数字串，这个对我们可能没有用处，因为我们总共只有一串
+    if img is not None:
+        height, width = img.shape
+        cropped = img[CROP_LEN:height - CROP_LEN, CROP_LEN:width - CROP_LEN]  # 裁去边缘
+        dilated = cv2.dilate(cropped, kernel_ellip, iterations=1)
+        # 输入的数字书写方向是水平的， 所以膨胀也要按照宽度方向膨胀
+        dilated = cv2.dilate(dilated, kernel_cross_w, iterations=10)
+        im_d, contours, hierarchy = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        idx = 0
+        output = []
+        for contour in contours:
+            [x, y, w, h] = cv2.boundingRect(contour)
+            '''if is_vertical and (w < 30 or w > 100 or h < 70 or h > 520):
+                continue
+            elif (is_vertical is False) and (h < 30 or h > 100 or w < 70 or w > 520):
+                continue'''  # 这里是用来判断图片大小的，以去掉明显不属于数字串的图片，需要根据环境调节
+            digits_str = cropped[y:y + h, x:x + w]
+            save = np.rot90(digits_str)
+            output.append(save)
+            idx = idx + 1
+        output.reverse()
+        return output
 
 
-def find_digits_str(folder):  # 找出所有的数字串，这个对我们可能没有用处，因为我们总共只有一串
-    for filename in os.listdir(folder):
-        img = cv2.imread(os.path.join(folder, filename), 0)
-        fn = os.path.splitext(filename)[0]  # without extension
-        if img is not None:
-            height, width = img.shape
-            thre_name = os.path.join(PROCESS_FOLDER, fn + '_thre.png')
-            cropped = img[CROP_LEN:height - CROP_LEN, CROP_LEN:width - CROP_LEN]
-            ret, thresh_img = cv2.threshold(cropped, THRESHOLD, 255, cv2.THRESH_BINARY_INV)
-            is_vertical = is_vertical_writing(thresh_img)
-            dilated = cv2.dilate(thresh_img, kernel_ellip, iterations=1)
-            if is_vertical:
-                dilated = cv2.dilate(dilated, kernel_cross_h, iterations=10)
-            else:
-                dilated = cv2.dilate(dilated, kernel_cross_w, iterations=10)
-            im_d, contours, hierarchy = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            idx = 0
-            for contour in contours:
-                [x, y, w, h] = cv2.boundingRect(contour)
-                if is_vertical and (w < 30 or w > 100 or h < 70 or h > 520):
-                    continue
-                elif (is_vertical == False) and (h < 30 or h > 100 or w < 70 or w > 520):
-                    continue
-
-                idx = idx + 1
-                digits_str = thresh_img[y:y + h, x:x + w]
-                save = np.rot90(digits_str)
-                str_name = os.path.join(DIGITS_STR_FOLDER, fn + str(idx) + "str.png")
-                cv2.imwrite(str_name, save)
-                # digits_arr = split_digits_str(digits_str, fn + '_s' + str(idx), is_vertical)
-                cv2.rectangle(thresh_img, (x, y), (x + w, y + h), (255, 0, 255), 2)
-            cv2.imwrite(thre_name, thresh_img)
+def adaptive_thresh(image, win_size, ratio=0.15):  # 定义了自适应阈值方法
+    i_mean = cv2.boxFilter(image, cv2.CV_32FC1, win_size)
+    out = image - (1.0 - ratio) * i_mean
+    out[out >= 0] = 0  # 注意mnist数据集以黑色为底色
+    out[out < 0] = 255
+    out = out.astype(np.uint8)
+    return out
 
 
-find_digits_str(READ_FOLDER)
-for filename in os.listdir(DIGITS_STR_FOLDER):
-        digits_string = cv2.imread(os.path.join(DIGITS_STR_FOLDER, filename), 0)
-        split_digits_str(digits_string, filename, is_vertical_writing(digits_string))
+def get_box(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape
+    crop_len_this = 400
+    cropped = gray[crop_len_this:height - crop_len_this, crop_len_this:width - crop_len_this]
+    # 采用自适应阈值法，显著减少图片不连续或糊成一团的现象
+    thresh_img = adaptive_thresh(cropped, (39, 39))
+    dilated = cv2.dilate(thresh_img, kernel_ellip, iterations=2)
+    im_d, contours, hierarchy = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contour_biggest = None
+    length = 0
+    for contour in contours:
+        [x, y, w, h] = cv2.boundingRect(contour)
+        if (w + h) > length:
+            contour_biggest = contour
+            length = w + h
+    # cv2.drawContours(img, contour_biggest, -1, (0, 255, 255), 4)
+    [x, y, w, h] = cv2.boundingRect(contour_biggest)
+    output = thresh_img[y:y+h, x:x+w]
+    assert dilated.shape == thresh_img.shape
+    cv2.namedWindow('outcome', 0)
+    cv2.imshow("outcome", output)
+    cv2.waitKey(0)
+    return output
 
