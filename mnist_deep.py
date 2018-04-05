@@ -1,228 +1,145 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import argparse
-import sys
-import numpy as np
-import cv2
-import os
-import os.path
-
-from tensorflow.examples.tutorials.mnist import input_data
-
 import tensorflow as tf
-import sys
+from  tensorflow.examples.tutorials.mnist import input_data
+import numpy as np
+import os
+import cv2
 
-FLAGS = None
-DIGITS_ARR_PATH = 'digit4'
-RESOLUTION = 28  # 28*28 for mnist dataset
+# 屏蔽waring信息
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-# Choose the corresponding labels
-# 567
-labels = np.array(
-    [0, 7, 5, 5,
-     1, 2, 3, 0, 7, 4, 6, 8,
-     5, 2, 3, 0, 6,
-     6, 4, 1, 9, 3, 7, 9, 6,  #
-     1, 3, 7, 1, 4, 5,
-     5, 0, 4,
-     2, 0, 1, 7, 0, 7, 0, 8,
-     1, 4, 3, 2, 0, 5, 2, 7,  #
-     1, 8, 8, 1, 9, 2, 5, 0, 0,
-     5, 1, 8, 0, 6, 8,
-     2, 6, 6, 7, 8, 6, 6, 4],
-    np.uint8)
+"""------------------加载数据---------------------"""
+# 载入数据
+mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+trX, trY, teX, teY = mnist.train.images, mnist.train.labels, mnist.test.images, mnist.test.labels
+# 改变数据格式，为了能够输入卷积层
+trX = trX.reshape(-1, 28, 28, 1)  # -1表示不考虑输入图片的数量,1表示单通道
+teX = teX.reshape(-1, 28, 28, 1)
 
-
-# 4
-# labels = np.array(
-#   [1,3,5,8,2,0,0,7,0,3,7,
-#   5,1,0,0,0,6,
-#   0,2,0,8,7,8,3,6,7,6,1,
-#   1,3,9,2,4,5,7,9,6,9,3],
-#   np.uint8)
-
-# 3
-# labels = np.array(
-#   [0,6,2,8,0,8,8,7,1,3, # 
-#   8,2,7,2,8,3,0,0,5,0,
-#   2,0,3,8,0,7,0,8,7,0,
-#   0,8,3,1,0,1,1,1,8,1,
-#   3,8,0,8,8,1,5,3,6,9,
-#   0,7,3,6,8,5,0,0,7,4],
-#   np.uint8)
-
-# 1
-# labels = np.array(
-#   [1,9,6,7,4,8,9,9, # 
-#   3,5,4,7,0,8,7,4,5],
-#   np.uint8)
-
-# 0
-# labels = np.array(
-#   [1,2,4,7,6,7,3, # 
-#   8,9,5,2,4,8,1],
-#   np.uint8)
-
-def load_digits_arr_from_folder():
-    digits_arr = np.array([])
-    for filename in os.listdir(DIGITS_ARR_PATH):
-        img = cv2.imread(os.path.join(DIGITS_ARR_PATH, filename), 0)
-        fn = os.path.splitext(filename)[0]  # without extension
-        if img is not None:
-            digit = np.concatenate([(img[i]) for i in range(RESOLUTION)])
-            digits_arr = np.append(digits_arr, digit)
-    digits_arr = digits_arr.reshape((-1, RESOLUTION * RESOLUTION))
-    return digits_arr
+"""------------------构建模型---------------------"""
+# 定义输入输出的数据容器
+X = tf.placeholder("float", [None, 28, 28, 1])
+Y = tf.placeholder("float", [None, 10])
 
 
-def deepnn(x):
-    """deepnn builds the graph for a deep net for classifying digits.
-  Args:
-    x: an input tensor with the dimensions (N_examples, 784), where 784 is the
-    number of pixels in a standard MNIST image.
-  Returns:
-    A tuple (y, keep_prob). y is a tensor of shape (N_examples, 10), with values
-    equal to the logits of classifying the digit into one of 10 classes (the
-    digits 0-9). keep_prob is a scalar placeholder for the probability of
-    dropout.
-  """
-    # Reshape to use within a convolutional neural net.
-    # Last dimension is for "features" - there is only one here, since images are
-    # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
-    x_image = tf.reshape(x, [-1, 28, 28, 1])
-
-    # First convolutional layer - maps one grayscale image to 32 feature maps.
-    W_conv1 = weight_variable([5, 5, 1, 32])
-    b_conv1 = bias_variable([32])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-
-    # Pooling layer - downsamples by 2X.
-    h_pool1 = max_pool_2x2(h_conv1)
-
-    # Second convolutional layer -- maps 32 feature maps to 64.
-    W_conv2 = weight_variable([5, 5, 32, 64])
-    b_conv2 = bias_variable([64])
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-
-    # Second pooling layer.
-    h_pool2 = max_pool_2x2(h_conv2)
-
-    # Fully connected layer 1 -- after 2 round of downsampling, our 28x28 image
-    # is down to 7x7x64 feature maps -- maps this to 1024 features.
-    W_fc1 = weight_variable([7 * 7 * 64, 1024])
-    b_fc1 = bias_variable([1024])
-
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
-
-    # Dropout - controls the complexity of the model, prevents co-adaptation of
-    # features.
-    keep_prob = tf.placeholder(tf.float32)
-    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-
-    # Map the 1024 features to 10 classes, one for each digit
-    W_fc2 = weight_variable([1024, 10])
-    b_fc2 = bias_variable([10])
-
-    y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-    return y_conv, keep_prob
+# 定义和初始化权重、dropout参数
+def init_weights(shape):
+    return tf.Variable(tf.random_normal(shape, stddev=0.01))
 
 
-def conv2d(x, W):
-    """conv2d returns a 2d convolution layer with full stride."""
-    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+w1 = init_weights([3, 3, 1, 32])        # 3X3的卷积核，获得32个特征
+w2 = init_weights([3, 3, 32, 64])       # 3X3的卷积核，获得64个特征
+w3 = init_weights([3, 3, 64, 128])      # 3X3的卷积核，获得128个特征
+w4 = init_weights([128 * 4 * 4, 625])   # 从卷积层到全连层
+w_o = init_weights([625, 10])           # 从全连层到输出层
+
+p_keep_conv = tf.placeholder("float")
+p_keep_hidden = tf.placeholder("float")
 
 
-def max_pool_2x2(x):
-    """max_pool_2x2 downsamples a feature map by 2X."""
-    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
-                          strides=[1, 2, 2, 1], padding='SAME')
+# 定义模型
+def create_model(X, w1, w2, w3, w4, w_o, p_keep_conv, p_keep_hidden):
+    # 第一组卷积层和pooling层
+    conv1 = tf.nn.conv2d(X, w1, strides=[1, 1, 1, 1], padding='SAME')
+    conv1_out = tf.nn.relu(conv1)
+    pool1 = tf.nn.max_pool(conv1_out, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    pool1_out = tf.nn.dropout(pool1, p_keep_conv)
+
+    # 第二组卷积层和pooling层
+    conv2 = tf.nn.conv2d(pool1_out, w2, strides=[1, 1, 1, 1], padding='SAME')
+    conv2_out = tf.nn.relu(conv2)
+    pool2 = tf.nn.max_pool(conv2_out, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    pool2_out = tf.nn.dropout(pool2, p_keep_conv)
+
+    # 第三组卷积层和pooling层
+    conv3 = tf.nn.conv2d(pool2_out, w3, strides=[1, 1, 1, 1], padding='SAME')
+    conv3_out = tf.nn.relu(conv3)
+    pool3 = tf.nn.max_pool(conv3_out, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    pool3 = tf.reshape(pool3, [-1, w4.get_shape().as_list()[0]])  # 转化成一维的向量
+    pool3_out = tf.nn.dropout(pool3, p_keep_conv)
+
+    # 全连层
+    fully_layer = tf.matmul(pool3_out, w4)
+    fully_layer_out = tf.nn.relu(fully_layer)
+    fully_layer_out = tf.nn.dropout(fully_layer_out, p_keep_hidden)
+
+    # 输出层
+    out = tf.matmul(fully_layer_out, w_o)
+
+    return out
 
 
-def weight_variable(shape):
-    """weight_variable generates a weight variable of a given shape."""
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    return tf.Variable(initial)
+model = create_model(X, w1, w2, w3, w4, w_o, p_keep_conv, p_keep_hidden)
 
+# 定义代价函数、训练方法、预测操作
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model, labels=Y))
+train_op = tf.train.RMSPropOptimizer(0.001, 0.9).minimize(cost)
+predict_op = tf.argmax(model, 1,name="predict")
 
-def bias_variable(shape):
-    """bias_variable generates a bias variable of a given shape."""
-    initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)
+# 定义一个saver
+saver=tf.train.Saver()
 
+# 定义存储路径
+ckpt_dir="./ckpt_dir"
+if not os.path.exists(ckpt_dir):
+    os.makedirs(ckpt_dir)
 
-def main(_):
-    # Import data
-    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
+"""------------------训练模型---------------------"""
+train_batch_size = 128  # 训练集的mini_batch_size=128
+test_batch_size = 256   # 测试集中调用的batch_size=256
+epoches = 5  # 迭代周期
+with tf.Session() as sess:
+    """-------训练模型--------"""
+    # 初始化所有变量
+    tf.global_variables_initializer().run()
 
-    # Create the model
-    x = tf.placeholder(tf.float32, [None, 784])
+    # 训练操作
+    # for i in range(epoches):
+    #     train_batch = zip(range(0, len(trX), train_batch_size),
+    #                       range(train_batch_size, len(trX) + 1, train_batch_size))
+    #     for start, end in train_batch:
+    #         sess.run(train_op, feed_dict={X: trX[start:end], Y: trY[start:end],
+    #                                       p_keep_conv: 0.8, p_keep_hidden: 0.5})
+    #     # 每个周期用测试集中随机抽出test_batch_size个图片进行测试
+    #     test_indices = np.arange(len(teX))  # 返回一个array[0,1...len(teX)]
+    #     np.random.shuffle(test_indices)     # 打乱这个array
+    #     test_indices = test_indices[0:test_batch_size]
+    #
+    #     # 获取测试集test_batch_size章图片的的预测结果
+    #     predict_result = sess.run(predict_op, feed_dict={X: teX[test_indices],
+    #                                                      p_keep_conv: 1.0,
+    #                                                      p_keep_hidden: 1.0})
+    #     # 获取真实的标签值
+    #     true_labels = np.argmax(teY[test_indices], axis=1)
+    #
+    #     # 计算准确率
+    #     accuracy = np.mean(true_labels == predict_result)
+    #     print("epoch", i, ":", accuracy)
+    #
+    #     # 保存模型
+    #     saver.save(sess,ckpt_dir+"/model.ckpt",global_step=i)
 
-    # Define loss and optimizer
-    y_ = tf.placeholder(tf.float32, [None, 10])
+    """-----加载模型，用导入的图片进行测试--------"""
+    # 载入图片
+    src = cv2.imread('./Pictures/9.png')
+    cv2.imshow("待测图片", src)
 
-    # Build the graph for the deep net
-    y_conv, keep_prob = deepnn(x)
+    # 将图片转化为28*28的灰度图
+    src = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
+    dst = cv2.resize(src, (28, 28), interpolation=cv2.INTER_CUBIC)
 
-    cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
-    train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-    correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
-    pred = tf.argmax(y_conv, 1)
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    # 将灰度图转化为1*784的能够输入的网络的数组
+    picture = np.zeros((28, 28))
+    for i in range(0, 28):
+        for j in range(0, 28):
+            picture[i][j] = (255 - dst[i][j])
+    picture = picture.reshape(1, 28, 28, 1)
 
-    saver = tf.train.Saver()
+    # 载入模型
+    saver.restore(sess,ckpt_dir+"/model.ckpt-4")
 
-    ## Uncomment the following lines to train model for the first time
-    # with tf.Session() as sess:
-    #   sess.run(tf.global_variables_initializer())
-    #   for i in range(20000):
-    #     batch = mnist.train.next_batch(50)
-    #     if i % 100 == 0:
-    #       train_accuracy = accuracy.eval(feed_dict={
-    #           x: batch[0], y_: batch[1], keep_prob: 1.0})
-    #       print('step %d, training accuracy %g' % (i, train_accuracy))
-    #     train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
-    #     save_path = saver.save(sess, "models/model.ckpt")
-    #   # Save the variables to disk.
-    #   save_path = saver.save(sess, "models/model.ckpt")
-    #   print("Model saved in file: %s" % save_path)
-
-    #   print('test accuracy %g' % accuracy.eval(feed_dict={
-    #       x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
-
-    # Then you can restore the pretrained model
-    with tf.Session() as sess:
-        saver.restore(sess, "models/model.ckpt")
-        print("Model restored.")
-        extract_data = load_digits_arr_from_folder()
-
-        ## visualization
-        # for k in range(len(extract_data)):
-        #   print('--------------------------------')
-        #   for i in range(28):
-        #     for j in range(28):
-        #       print(' ' if extract_data[k][i*28+j] < 0.5 else 1, ' ', end='')
-
-        #     print('')
-
-        predicted = sess.run(pred, feed_dict={x: extract_data, keep_prob: 1.0})
-        print('labels', labels)
-        print('predicted', predicted)
-        boolarr = (labels == predicted)
-        print(boolarr)
-        correct = np.sum(boolarr)
-        num = boolarr.shape[0]
-        acc = correct * 1.0 / num
-        print('test accuracy of %s is %d / %d = %f' % (DIGITS_ARR_PATH, correct, num, acc))
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str,
-                        default='/tmp/tensorflow/mnist/input_data',
-                        help='Directory for storing input data')
-    FLAGS, unparsed = parser.parse_known_args()
-    tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+    # 进行预测
+    predict_result = sess.run(predict_op, feed_dict={X: picture,
+                                                    p_keep_conv: 1.0,
+                                                    p_keep_hidden: 1.0})
+    print("你导入的图片是：",predict_result[0])
+    cv2.waitKey(20170731)
