@@ -20,20 +20,18 @@ teX = teX.reshape(-1, 28, 28, 1)
 X = tf.placeholder("float", [None, 28, 28, 1])
 Y = tf.placeholder("float", [None, 10])
 
+p_keep_conv = tf.placeholder("float")
+p_keep_hidden = tf.placeholder("float")
 
 # 定义和初始化权重、dropout参数
 def init_weights(shape):
     return tf.Variable(tf.random_normal(shape, stddev=0.01))
-
 
 w1 = init_weights([3, 3, 1, 32])        # 3X3的卷积核，获得32个特征
 w2 = init_weights([3, 3, 32, 64])       # 3X3的卷积核，获得64个特征
 w3 = init_weights([3, 3, 64, 128])      # 3X3的卷积核，获得128个特征
 w4 = init_weights([128 * 4 * 4, 625])   # 从卷积层到全连层
 w_o = init_weights([625, 10])           # 从全连层到输出层
-
-p_keep_conv = tf.placeholder("float")
-p_keep_hidden = tf.placeholder("float")
 
 
 # 定义模型
@@ -67,42 +65,39 @@ def create_model(X, w1, w2, w3, w4, w_o, p_keep_conv, p_keep_hidden):
 
     return out
 
+def recog_number(digit):
+        
+    model = create_model(X, w1, w2, w3, w4, w_o, p_keep_conv, p_keep_hidden)
 
-model = create_model(X, w1, w2, w3, w4, w_o, p_keep_conv, p_keep_hidden)
+    # 定义代价函数、训练方法、预测操作
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model, labels=Y))
+    train_op = tf.train.RMSPropOptimizer(0.001, 0.9).minimize(cost)
+    predict_op = tf.argmax(model, 1,name="predict")
 
-# 定义代价函数、训练方法、预测操作
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model, labels=Y))
-train_op = tf.train.RMSPropOptimizer(0.001, 0.9).minimize(cost)
-predict_op = tf.argmax(model, 1,name="predict")
+    # 定义一个saver
+    saver=tf.train.Saver()
 
-# 定义一个saver
-saver=tf.train.Saver()
+    # 定义存储路径
+    ckpt_dir="./ckpt_dir"
 
-# 定义存储路径
-ckpt_dir="./ckpt_dir"
+    """------------------训练模型---------------------"""
+    train_batch_size = 128  # 训练集的mini_batch_size=128
+    test_batch_size = 256   # 测试集中调用的batch_size=256
+    epoches = 5  # 迭代周期
+    with tf.Session() as sess:
+        # 初始化所有变量
+        tf.global_variables_initializer().run()
+        """-----加载模型，用导入的图片进行测试--------"""
+        # 载入图片
+        
+        dst = cv2.resize(digit, (28, 28), interpolation=cv2.INTER_CUBIC)
+        dst = dst.reshape(1, 28, 28, 1)
+        # 载入模型
+        saver.restore(sess,ckpt_dir+"/model.ckpt-9")  # 从第十次的结果中恢复
 
-"""------------------训练模型---------------------"""
-train_batch_size = 128  # 训练集的mini_batch_size=128
-test_batch_size = 256   # 测试集中调用的batch_size=256
-epoches = 5  # 迭代周期
-with tf.Session() as sess:
-    # 初始化所有变量
-    tf.global_variables_initializer().run()
-    """-----加载模型，用导入的图片进行测试--------"""
-    # 载入图片
-    src = cv2.imread('write_folder/2.png')
-    cv2.imshow("待测图片", src)
-    
-    # 将图片转化为28*28的灰度图
-    src = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-    dst = cv2.resize(src, (28, 28), interpolation=cv2.INTER_CUBIC)
-    dst = dst.reshape(1, 28, 28, 1)
-    # 载入模型
-    saver.restore(sess,ckpt_dir+"/model.ckpt-4")
-
-    # 进行预测
-    predict_result = sess.run(predict_op, feed_dict={X: dst,
-                                                    p_keep_conv: 1.0,
-                                                    p_keep_hidden: 1.0})
-    print("你导入的图片是：",predict_result[0])
-    cv2.waitKey(20170731)
+        # 进行预测
+        predict_result = sess.run(predict_op, feed_dict={X: dst,
+                                                        p_keep_conv: 1.0,
+                                                        p_keep_hidden: 1.0})
+        print("你导入的图片是：",predict_result[0])
+    return predict_result[0]

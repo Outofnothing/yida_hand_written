@@ -8,7 +8,7 @@ RESOLUTION = 28  # 28*28 for mnist dataset
 kernel_connect = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], np.uint8)
 # Elliptical Kernel
 kernel_ellip = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-kernel_erode = cv2.getStructuringElement(cv2.MORPH_ERODE, (3, 3))
+kernel_erode = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 # Cross-shaped Kernel
 # to manipulate the orientation of dilution, large x means
 # horizonatally dilating more, large y means vertically dilating more
@@ -52,7 +52,6 @@ def split_digits_str(s):
         idx = idx + 1
         [x, y, w, h] = cv2.boundingRect(contour)
         digit = s_copy[y:y + h, x:x + w]
-
         # in order to keep the original scale of digit
         # pad rectangles to squares before resizing
         pad_len = int((h - w) / 2)
@@ -108,7 +107,7 @@ def get_box(img):
         crop_len_this = 20
         cropped = gray[crop_len_this:height - crop_len_this, crop_len_this:width - crop_len_this]
         # 采用自适应阈值法，显著减少图片不连续或糊成一团的现象
-        thresh_img = adaptive_thresh(cropped, (31, 31))
+        thresh_img = adaptive_thresh(cropped, (39, 39))
         dilated = cv2.dilate(thresh_img, kernel_ellip, iterations=2)
         im_d, contours, hierarchy = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         contour_biggest = None
