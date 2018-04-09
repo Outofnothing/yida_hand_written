@@ -41,42 +41,15 @@ def is_vertical_writing(img):  # 判断图片里数字的书写方向，因为cv
     return False
 
 
-# 输入一串数字（图片）将其分割为单个的数字
-def split_digits_str(s):
-    # 输入的数字串从下往上列出，右视图是阅读方向
-    s_copy = cv2.dilate(s, kernel_connect, iterations=1)
-    im_s, contours, hierarchy = cv2.findContours(s_copy.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    idx = 0
-    digits_arr = []
-    for contour in contours:
-        idx = idx + 1
-        [x, y, w, h] = cv2.boundingRect(contour)
-        digit = s_copy[y:y + h, x:x + w]
-        # in order to keep the original scale of digit
-        # pad rectangles to squares before resizing
-        pad_len = int((h - w) / 2)
-        if pad_len > 0:  # to pad width
-            # Forms a border around an image: top, bottom, left, right
-            digit = cv2.copyMakeBorder(digit, 0, 0, pad_len, pad_len, cv2.BORDER_CONSTANT, value=0)
-        elif pad_len < 0:  # to pad height
-            digit = cv2.copyMakeBorder(digit, -pad_len, -pad_len, 0, 0, cv2.BORDER_CONSTANT, value=0)
-        pad = int(digit.shape[0] / 5)  # avoid the digit directly connect with border, leave around 4 pixels
-        digit = cv2.copyMakeBorder(digit, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
-        digit = cv2.resize(digit, (RESOLUTION, RESOLUTION), interpolation=cv2.INTER_AREA)
-        digit = np.rot90(digit, 3)  # rotate back to horizontal orientation
-        digits_arr.append(digit)
-    return digits_arr
-
-
 def find_digits_str(img):  # 找出所有的数字串，这个对我们可能没有用处，因为我们总共只有一串
     if img is not None:
-        CROP_LEN = 20  # 被去掉的img 的边缘长度， 消掉边框
+        CROP_LEN = 15  # 被去掉的img 的边缘长度， 消掉边框
         height, width = img.shape
         cropped = img[CROP_LEN:height - CROP_LEN, CROP_LEN:width - CROP_LEN]  # 裁去边缘
         # eroded = cv2.erode(cropped, kernel_erode, iterations=2)
         dilated = cv2.dilate(cropped, kernel_ellip, iterations=1)
         # 输入的数字书写方向是水平的， 所以膨胀也要按照宽度方向膨胀
-        dilated = cv2.dilate(dilated, kernel_cross_w, iterations=10)
+        dilated = cv2.dilate(dilated, kernel_cross_w, iterations=15)
         im_d, contours, hierarchy = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         output = []
         for contour in contours:
@@ -126,3 +99,40 @@ def get_box(img):
         cv2.waitKey(0)
         return output
 
+
+def adaptive_clear(image):  
+    out = image.copy
+    out[out < 220] = 0
+    out = out.astype(np.uint8)
+    return out
+
+
+def split_digits_str(s):
+    # 输入的数字串从下往上列出，右视图是阅读方向
+    s_copy = cv2.dilate(s, kernel_connect, iterations=1)
+    string_h, string_w = s_copy.shape
+    im_s, contours, hierarchy = cv2.findContours(s_copy.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    idx = 0
+    location = 1000
+    digits_arr = []
+    for contour in contours:
+        [x, y, w, h] = cv2.boundingRect(contour)
+        print("This contour is in :", w, h)
+        if x > int(0.3 * string_w):
+            location = idx
+        idx = idx + 1
+        digit = s_copy[y:y + h, x:x + w]
+        # in order to keep the original scale of digit
+        # pad rectangles to squares before resizing
+        pad_len = int((h - w) / 2)
+        if pad_len > 0:  # to pad width
+            # Forms a border around an image: top, bottom, left, right
+            digit = cv2.copyMakeBorder(digit, 0, 0, pad_len, pad_len, cv2.BORDER_CONSTANT, value=0)
+        elif pad_len < 0:  # to pad height
+            digit = cv2.copyMakeBorder(digit, -pad_len, -pad_len, 0, 0, cv2.BORDER_CONSTANT, value=0)
+        pad = int(digit.shape[0] / 5)  # avoid the digit directly connect with border, leave around 4 pixels
+        digit = cv2.copyMakeBorder(digit, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+        digit = cv2.resize(digit, (RESOLUTION, RESOLUTION), interpolation=cv2.INTER_AREA)
+        digit = np.rot90(digit, 3)    # rotate back to horizontal orientation
+        digits_arr.append(digit)
+    return digits_arr, location

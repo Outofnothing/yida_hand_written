@@ -2,7 +2,6 @@ import tensorflow as tf
 from  tensorflow.examples.tutorials.mnist import input_data
 import os
 from restructure import *
-
 # 屏蔽waring信息
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -80,29 +79,45 @@ def recog_number():
         # 初始化所有变量
         tf.global_variables_initializer().run()
         # 载入模型
-        saver.restore(sess,ckpt_dir+"/model.ckpt-9")
-        frame = cv2.imread("box_test_images\\0.jpg")
+        saver.restore(sess,ckpt_dir+"/model.ckpt-19")
+        frame = cv2.imread("box_test_images\\0409.jpg")
         frame = get_box(frame)
         string = find_digits_str(frame)
         for i in range(len(string)):
             cv2.namedWindow("string", 0)
             cv2.imshow("string", string[i])
             cv2.waitKey(0)
-            digits = split_digits_str(string[i])
+            digits, location = split_digits_str(string[i])
             print(len(digits))
+            digit_pred = ''
             for j in range(len(digits)):
-                cv2.namedWindow("digit", 0)
-                cv2.imshow("digit", digits[j])
-                cv2.waitKey(500)
                 if digits[j].shape != (28, 28):
                     continue
-                # 进行预测, 下两行不可少
-                dst = cv2.resize(digits[j], (28, 28), interpolation=cv2.INTER_CUBIC)
-                dst = dst.reshape(1, 28, 28, 1)
-                predict_result = sess.run(predict_op, feed_dict={X: dst,
-                                                                 p_keep_conv: 1.0,
-                                                                 p_keep_hidden: 1.0})
-                print("你导入的图片是：", predict_result[0])
+                if j == location:
+                    print("你导入的图片是： ", "小数点")
+                    digit_pred += str(".")
+                    cv2.namedWindow("digit", 0)
+                    cv2.imshow("digit", digits[j])
+                    cv2.waitKey(1000)
+                else:
+                    cv2.namedWindow("digit", 0)
+                    cv2.imshow("digit", digits[j])
+                    cv2.waitKey(1000)
+                   
+                    # 进行预测, 下两行不可少
+                    dst = cv2.resize(digits[j], (28, 28), interpolation=cv2.INTER_LINEAR)
+                    # ret, dst = cv2.threshold(dst, 50, 255, cv2.THRESH_BINARY)
+                    dst = dst.reshape(1, 28, 28, 1)
+                    predict_result = sess.run(predict_op, feed_dict={X: dst,
+                                                                    p_keep_conv: 1.0,
+                                                                    p_keep_hidden: 1.0})
+                    print("你导入的图片是：", predict_result[0])
+                    digit_pred += str(predict_result[0])
+            print("The %sth number string is:" % i, digit_pred)
+            cv2.namedWindow("string", 0)
+            cv2.imshow("string", string[i])
+            cv2.waitKey(0)
 
 
-recog_number()
+if __name__ == "__main__":
+    recog_number()
