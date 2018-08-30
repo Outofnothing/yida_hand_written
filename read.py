@@ -67,7 +67,8 @@ def recog_number():
     model = create_model(X, w1, w2, w3, w4, w_o, p_keep_conv, p_keep_hidden)
     # 定义代价函数、训练方法、预测操作
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model, labels=Y))
-    train_op = tf.train.RMSPropOptimizer(0.001, 0.9).minimize(cost)
+    # train_op = tf.train.RMSPropOptimizer(0.001, 0.9).minimize(cost)
+    train_op = tf.train.AdamOptimizer(1e-4).minimize(cost)
     predict_op = tf.argmax(model, 1, name="predict")
 
     # 定义一个saver
@@ -79,43 +80,49 @@ def recog_number():
         # 初始化所有变量
         tf.global_variables_initializer().run()
         # 载入模型
-        saver.restore(sess,ckpt_dir+"/model.ckpt-19")
-        frame = cv2.imread("box_test_images\\0409.jpg")
+        saver.restore(sess,ckpt_dir+"/model.ckpt-29")
+        frame = cv2.imread("box_test_images\\0.jpg")
         frame = get_box(frame)
         string = find_digits_str(frame)
-        for i in range(len(string)):
-            cv2.namedWindow("string", 0)
+        score = 0
+        for it in range(5):
+            for i in range(len(string)):
+                cv2.namedWindow("string", 0)
+                cv2.imshow("string", string[i])
+                cv2.waitKey(100)
+                digits, location = split_digits_str(string[i])
+                #print(len(digits))
+                digit_pred = ''
+                for j in range(len(digits)):
+                    if digits[j].shape != (28, 28):
+                        continue
+                    if j == location:
+                        #print("你导入的图片是： ", "小数点")
+                        digit_pred += str(".")
+                        cv2.namedWindow("digit", 0)
+                        cv2.imshow("digit", digits[j])
+                        cv2.waitKey(100)
+                    else:
+                        cv2.namedWindow("digit", 0)
+                        cv2.imshow("digit", digits[j])
+                        cv2.waitKey(100)
+                    
+                        # 进行预测, 下两行不可少
+                        dst = cv2.resize(digits[j], (28, 28), interpolation=cv2.INTER_LINEAR)
+                        dst = dst.reshape(1, 28, 28, 1)
+                        predict_result = sess.run(predict_op, feed_dict={X: dst,
+                                                                        p_keep_conv: 1.0,
+                                                                        p_keep_hidden: 1.0})
+                        # print("你导入的图片是：", predict_result[0])
+                        digit_pred += str(predict_result[0])
+                if digit_pred == answer[i]:
+                    score += 1
+            
+            print("The %sth answer is:" % (i+1), digit_pred)
+            '''cv2.namedWindow("string", 0)
             cv2.imshow("string", string[i])
-            cv2.waitKey(0)
-            digits, location = split_digits_str(string[i])
-            print(len(digits))
-            digit_pred = ''
-            for j in range(len(digits)):
-                if digits[j].shape != (28, 28):
-                    continue
-                if j == location:
-                    print("你导入的图片是： ", "小数点")
-                    digit_pred += str(".")
-                    cv2.namedWindow("digit", 0)
-                    cv2.imshow("digit", digits[j])
-                    cv2.waitKey(1000)
-                else:
-                    cv2.namedWindow("digit", 0)
-                    cv2.imshow("digit", digits[j])
-                    cv2.waitKey(1000)
-                   
-                    # 进行预测, 下两行不可少
-                    dst = cv2.resize(digits[j], (28, 28), interpolation=cv2.INTER_LINEAR)
-                    # ret, dst = cv2.threshold(dst, 50, 255, cv2.THRESH_BINARY)
-                    dst = dst.reshape(1, 28, 28, 1)
-                    predict_result = sess.run(predict_op, feed_dict={X: dst,
-                                                                    p_keep_conv: 1.0,
-                                                                    p_keep_hidden: 1.0})
-                    print("你导入的图片是：", predict_result[0])
-                    digit_pred += str(predict_result[0])
-            print("The %sth number string is:" % i, digit_pred)
-            cv2.namedWindow("string", 0)
-            cv2.imshow("string", string[i])
+            cv2.waitKey(1000)'''
+            print("Final score is %s!"%score)
             cv2.waitKey(0)
 
 

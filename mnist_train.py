@@ -86,7 +86,7 @@ if not os.path.exists(ckpt_dir):
 """------------------训练模型---------------------"""
 train_batch_size = 128  # 训练集的mini_batch_size=128
 test_batch_size = 256   # 测试集中调用的batch_size=256
-epoches = 20  # 迭代周期
+epoches = 5  # 迭代周期
 with tf.Session() as sess:
     """-------训练模型--------"""
     # 初始化所有变量

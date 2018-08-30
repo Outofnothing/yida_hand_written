@@ -14,6 +14,7 @@ kernel_erode = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 # horizonatally dilating more, large y means vertically dilating more
 kernel_cross_h = cv2.getStructuringElement(cv2.MORPH_CROSS, (1, 8))
 kernel_cross_w = cv2.getStructuringElement(cv2.MORPH_CROSS, (8, 1))
+answer = ['34567', '123.589', '305421', '778.9023015', '554433.89']
 
 
 def is_vertical_writing(img):  # 判断图片里数字的书写方向，因为cv2.findContours是由下往上找的
@@ -42,8 +43,8 @@ def is_vertical_writing(img):  # 判断图片里数字的书写方向，因为cv
 
 
 def find_digits_str(img):  # 找出所有的数字串，这个对我们可能没有用处，因为我们总共只有一串
-    if img is not None:
-        CROP_LEN = 15  # 被去掉的img 的边缘长度， 消掉边框
+    if img != None:
+        CROP_LEN = 20  # 被去掉的img 的边缘长度， 消掉边框
         height, width = img.shape
         cropped = img[CROP_LEN:height - CROP_LEN, CROP_LEN:width - CROP_LEN]  # 裁去边缘
         # eroded = cv2.erode(cropped, kernel_erode, iterations=2)
@@ -74,7 +75,7 @@ def adaptive_thresh(image, win_size, ratio=0.15):  # 定义了自适应阈值方
 
 
 def get_box(img):
-    if img is not None:
+    if img != None:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         height, width = gray.shape
         crop_len_this = 20
@@ -117,7 +118,7 @@ def split_digits_str(s):
     digits_arr = []
     for contour in contours:
         [x, y, w, h] = cv2.boundingRect(contour)
-        print("This contour is in :", w, h)
+        #print("This contour is in :", w, h)
         if x > int(0.3 * string_w):
             location = idx
         idx = idx + 1
